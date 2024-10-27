@@ -58,6 +58,8 @@ class Bandcamper:
         "wav",
     ]
 
+    reserved_characters = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
+
     BANDCAMP_EMAIL_VALIDATOR = FromAddressValidator(r".+@email\.bandcamp\.com")
 
     PLATFORMS = {
@@ -80,6 +82,12 @@ class Bandcamper:
         self.requester = requester or Requester()
         for url in urls:
             self.add_url(url)
+
+    def sanitize_filename(self, filename: str) -> str:
+        for char in self.reserved_characters:
+            filename = filename.replace(char, "")
+        filename = filename.replace("\0", "")
+        return filename
 
     def _is_valid_custom_domain(self, url):
         return self.requester.get_ip_from_url(url) == self.CUSTOM_DOMAIN_IP
@@ -243,10 +251,14 @@ class Bandcamper:
         else:
             output = output_extra
             context["filename"] = file_path.name
-        move_to = self._sanitize_file_path(
-            destination / self.formatter.format(output, **context)
+        sanitized_filename = self.sanitize_filename(
+            self.formatter.format(output, **context)
         )
-        move_to.parent.mkdir(parents=True, exist_ok=True)
+        artist_name = context.get("artist", "Unknown Artist")
+        sanitized_artist_folder = self.sanitize_filename(artist_name)
+        artist_folder = destination / sanitized_artist_folder
+        artist_folder.mkdir(parents=True, exist_ok=True)
+        move_to = artist_folder / sanitized_filename.replace(artist_name, "", 1)
         file_path.replace(move_to)
         return move_to
 
@@ -254,7 +266,6 @@ class Bandcamper:
         file_paths = []
         for track in track_info:
             if track.get("file"):
-                
                 if track["track_num"] is None:
                     track_num = 1
                 else:
